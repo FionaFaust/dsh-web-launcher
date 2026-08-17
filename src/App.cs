@@ -165,8 +165,13 @@ namespace DshWebLauncher
         }
     }
 
-    internal sealed class BrowserForm : Form
+    internal sealed class BrowserForm : Form, IMessageFilter
     {
+        private const int WM_KEYDOWN = 0x0100;
+        private const int WM_SYSKEYDOWN = 0x0104;
+        private const int VK_F11 = 0x7A;
+        private const int VK_ESCAPE = 0x1B;
+
         private Microsoft.Web.WebView2.WinForms.WebView2 webView;
         private Panel hostPanel;
         private ToolStrip toolStrip;
@@ -224,26 +229,28 @@ namespace DshWebLauncher
             Resize += OnWindowResize;
             Load += OnFormLoad;
             FormClosing += OnFormClosing;
-            KeyPreview = true;
-            KeyDown += OnGlobalKeyDown;
+
+            // 用消息过滤器而非 KeyPreview：WebView2 是独立 HWND 宿主，
+            // 焦点在网页内时按键消息不经过 WinForms 键盘管道，必须在此层拦截
+            Application.AddMessageFilter(this);
         }
 
-        // F11 全屏 / Esc 退出全屏
-        private void OnGlobalKeyDown(object sender, KeyEventArgs e)
+        // IMessageFilter：在消息分发给任何窗口（含 WebView2 子窗口）之前拦截 F11 / Esc
+        public bool PreFilterMessage(ref Message m)
         {
-            if (e.KeyCode == Keys.F11)
+            if (m.Msg != WM_KEYDOWN && m.Msg != WM_SYSKEYDOWN) return false;
+            int key = (int)(long)m.WParam;
+            if (key == VK_F11)
             {
-                e.Handled = true;
-                ToggleFullscreen(true);
+                ToggleFullscreen(!isFullscreen);
+                return true;   // 吞掉消息，不传给 WebView2
             }
-            else if (e.KeyCode == Keys.Escape)
+            if (key == VK_ESCAPE && isFullscreen)
             {
-                if (isFullscreen)
-                {
-                    e.Handled = true;
-                    ToggleFullscreen(false);
-                }
+                ToggleFullscreen(false);
+                return true;
             }
+            return false;
         }
 
         // 全屏：记状态→隐藏栏/边框→铺满所在显示器；退出时原样恢复
@@ -534,6 +541,7 @@ namespace DshWebLauncher
 
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
+            Application.RemoveMessageFilter(this);
             try
             {
                 if (initialized) webView.Dispose();
