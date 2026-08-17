@@ -44,7 +44,7 @@
 
 ```jsonc
 {
-  "title": "Euporiandra's DSH Web Launcher",          // 窗口标题（默认 "Euporiandra's DSH Web Launcher"）
+  "title": "Euporiandra's DeepSeek Harness Web Launcher",          // 窗口标题（默认 "Euporiandra's DeepSeek Harness Web Launcher"）
   "url": "http://127.0.0.1:3080",           // 目标页面地址，DSH端默认的本地映射端口为3080，若经自行配置或服务端部署，则填入对应的IP:端口
   "port": 3080,                             // 端口就绪检测端口（与url中的映射端口对应）
   "startScript": "",                        // 可选：服务未运行时隐藏调用的启动脚本
