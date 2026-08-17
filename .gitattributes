@@ -1,0 +1,12 @@
+# Normalize line endings
+* text=auto
+
+# Binary files
+*.ico binary
+*.dll binary
+*.exe binary
+*.png binary
+
+# Batch files must keep CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf

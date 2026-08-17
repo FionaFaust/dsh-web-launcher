@@ -1,0 +1,16 @@
+# Build output
+dist/
+
+# Runtime artifacts
+WebView2Loader.dll
+
+# User-specific config (contains local paths)
+launcher.config.json
+
+# IDE
+.vs/
+*.user
+*.suo
+
+# Misc
+*.log

@@ -1,0 +1,9 @@
+{
+  "title": "DeepSeek Harness Web",
+  "url": "http://127.0.0.1:3080",
+  "port": 3080,
+  "startScript": "",
+  "waitSeconds": 40,
+  "windowScale": 0.72,
+  "resolutions": [[3840, 2160], [2560, 1600]]
+}
