@@ -14,23 +14,14 @@ using Microsoft.Web.WebView2.Core;
 
 namespace DshWebLauncher
 {
-    /// <summary>
-    /// DSH Web Launcher — DeepSeek Harness 内嵌浏览器启动器（发行版）。
-    /// 基于 WebView2 (Chromium) 的无浏览器 UI 客户端：
-    ///   - 默认"跟随窗口"渲染（按系统 DPI 清晰显示）
-    ///   - 可选固定渲染分辨率档位（如 3840x2160 / 2560x1600）
-    ///   - F11 全屏 / Esc 退出
-    ///   - 可选：目标服务未启动时自动调用启动脚本
-    /// 所有行为可通过 exe 旁的 launcher.config.json 配置。
-    /// </summary>
+    // 配置默认值，可被 exe 旁 launcher.config.json 覆盖
     internal static class Program
     {
         private const string CoreAsm = "Microsoft.Web.WebView2.Core.dll";
         private const string WinFormsAsm = "Microsoft.Web.WebView2.WinForms.dll";
         private const string LoaderRes = "WebView2Loader.dll";
 
-        // ---------- 运行时配置（默认值，可被 launcher.config.json 覆盖） ----------
-        internal static string WindowTitle = "DeepSeek Harness Web";
+        internal static string WindowTitle = "Euporiandra's DeepSeek Harness Web Launcher";
         internal static string HomeUrl = "http://127.0.0.1:3080";
         internal static int Port = 3080;
         internal static string StartScript = "";
@@ -50,16 +41,14 @@ namespace DshWebLauncher
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            // WebView2 托管程序集以嵌入资源方式内置，运行时在此按需加载
             AppDomain.CurrentDomain.AssemblyResolve += OnAssemblyResolve;
             EnsureLoaderDll();
 
             Application.Run(new BrowserForm());
         }
 
-        /// <summary>
-        /// 从 exe 同目录的 launcher.config.json 读取配置（JSON 对象）。
-        /// 文件缺失或字段缺失/非法时使用内置默认值。
-        /// </summary>
+        // 读取 exe 同目录 launcher.config.json；缺失或非法时保持默认值
         private static void LoadConfig()
         {
             try
@@ -95,9 +84,10 @@ namespace DshWebLauncher
                     }
                 }
             }
-            catch { /* 配置损坏时保持默认值 */ }
+            catch { }
         }
 
+        // 从嵌入资源加载 WebView2 托管 DLL
         private static Assembly OnAssemblyResolve(object sender, ResolveEventArgs args)
         {
             string name = new AssemblyName(args.Name).Name;
@@ -114,7 +104,7 @@ namespace DshWebLauncher
             }
         }
 
-        /// <summary>首次运行把内嵌的原生 WebView2Loader.dll 释放到 exe 目录。</summary>
+        // 首次运行把内嵌的原生 WebView2Loader.dll 释放到 exe 目录
         private static void EnsureLoaderDll()
         {
             try
@@ -136,6 +126,7 @@ namespace DshWebLauncher
             catch { }
         }
 
+        // 800ms 超时的端口存活检测
         internal static bool IsPortOpen()
         {
             try
@@ -154,7 +145,7 @@ namespace DshWebLauncher
             }
         }
 
-        /// <summary>目标服务未运行且配置了 startScript 时，隐藏调用启动脚本。</summary>
+        // 服务未运行且配置了 startScript 时，隐藏调用启动脚本
         internal static void StartDshIfNeeded()
         {
             if (string.IsNullOrEmpty(StartScript)) return;
@@ -174,7 +165,6 @@ namespace DshWebLauncher
         }
     }
 
-    /// <summary>主窗口：默认跟随窗口渲染（清晰），可选固定分辨率。</summary>
     internal sealed class BrowserForm : Form
     {
         private Microsoft.Web.WebView2.WinForms.WebView2 webView;
@@ -197,7 +187,7 @@ namespace DshWebLauncher
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(960, 640);
 
-            // 鲸鱼图标（嵌入资源；可选覆盖：exe 同目录 app.ico 优先）
+            // 图标：优先 exe 旁 app.ico，否则用内嵌鲸鱼图标
             try
             {
                 string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
@@ -216,7 +206,7 @@ namespace DshWebLauncher
             }
             catch { }
 
-            // 默认窗口：屏幕比例（可配置），适中且不满屏
+            // 初始窗口 = 屏幕 × windowScale，不满屏
             Size screen = Screen.PrimaryScreen.Bounds.Size;
             double scale = Program.WindowScale;
             if (scale <= 0.1 || scale > 1.0) scale = 0.72;
@@ -238,7 +228,7 @@ namespace DshWebLauncher
             KeyDown += OnGlobalKeyDown;
         }
 
-        /// <summary>F11 全屏，Esc 退出全屏。</summary>
+        // F11 全屏 / Esc 退出全屏
         private void OnGlobalKeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.F11)
@@ -256,6 +246,7 @@ namespace DshWebLauncher
             }
         }
 
+        // 全屏：记状态→隐藏栏/边框→铺满所在显示器；退出时原样恢复
         private void ToggleFullscreen(bool enter)
         {
             if (enter == isFullscreen) return;
@@ -270,7 +261,7 @@ namespace DshWebLauncher
                 WindowState = FormWindowState.Normal;
                 toolStrip.Visible = false;
                 statusLabel.Owner.Visible = false;
-                Bounds = Screen.FromHandle(Handle).Bounds;   // 覆盖所在显示器
+                Bounds = Screen.FromHandle(Handle).Bounds;
                 isFullscreen = true;
                 LayoutWebView();
             }
@@ -285,13 +276,12 @@ namespace DshWebLauncher
             }
         }
 
-        /// <summary>当前是否固定分辨率模式（下拉选择固定档位时）。</summary>
+        // 下拉第一项为"跟随窗口"，其余为配置的固定分辨率档位
         private bool IsFixedResolution()
         {
             return cmbResolution != null && cmbResolution.SelectedIndex > 0;
         }
 
-        /// <summary>当前固定档位的分辨率（非固定模式时为窗口尺寸）。</summary>
         private Size CurrentRenderSize()
         {
             if (cmbResolution != null && cmbResolution.SelectedIndex > 0)
@@ -365,7 +355,7 @@ namespace DshWebLauncher
             Controls.Add(strip);
         }
 
-        /// <summary>布局 WebView2：跟随窗口模式填满客户区；固定模式等比缩放居中。</summary>
+        // 布局：跟随窗口模式填满客户区；固定分辨率模式等比缩放居中
         private void LayoutWebView()
         {
             if (hostPanel == null || webView == null) return;
@@ -375,13 +365,12 @@ namespace DshWebLauncher
 
             if (!IsFixedResolution())
             {
-                // 跟随窗口：视口=窗口，WebView2 按系统 DPI 渲染（清晰）
                 webView.SetBounds(0, 0, cw, ch);
                 return;
             }
 
-            // 固定分辨率：控件物理尺寸与 RasterizationScale 成对更新，
-            // 逻辑视口 = 物理尺寸 / RasterizationScale 恒等于 renderSize。
+            // 固定分辨率核心：控件物理尺寸与 RasterizationScale 成对更新，
+            // 使 逻辑视口 = 物理尺寸 / RasterizationScale 恒等于目标分辨率。
             double scale = Math.Min((double)cw / renderSize.Width, (double)ch / renderSize.Height);
             if (scale < 0.05) scale = 0.05;
             if (scale > 4.0) scale = 4.0;
@@ -407,7 +396,7 @@ namespace DshWebLauncher
             }
         }
 
-        /// <summary>应用当前模式的渲染设置。</summary>
+        // 渲染模式切换：固定分辨率用 raw pixels；跟随窗口恢复系统 DPI
         private void ApplyRenderMode()
         {
             try
@@ -421,7 +410,6 @@ namespace DshWebLauncher
                 }
                 else
                 {
-                    // 恢复控件默认：跟随系统 DPI，清晰渲染
                     ctl.ShouldDetectMonitorScaleChanges = true;
                 }
             }
@@ -450,7 +438,7 @@ namespace DshWebLauncher
             }
         }
 
-        /// <summary>WinForms WebView2 未公开 Controller，通过反射获取内部实例。</summary>
+        // WinForms WebView2 未公开 Controller，只能反射取内部字段
         private CoreWebView2Controller GetController()
         {
             if (webView == null) return null;
@@ -517,6 +505,7 @@ namespace DshWebLauncher
                     txtUrl.Text = uri;
                     if (e2.IsSuccess)
                     {
+                        // 读取页面真实视口，用于状态栏展示
                         string js = "window.innerWidth + ' x ' + window.innerHeight + ' @ ' + window.devicePixelRatio";
                         string vp = "";
                         try
