@@ -48,7 +48,7 @@ namespace DshWebLauncher
             Application.Run(new BrowserForm());
         }
 
-        // 读取 exe 同目录 launcher.config.json；缺失或非法时保持默认值
+        // 读取 exe 同目录 launcher.config.json；缺失或不可读时保持默认值
         private static void LoadConfig()
         {
             try
@@ -187,7 +187,7 @@ namespace DshWebLauncher
             StartPosition = FormStartPosition.CenterScreen;
             MinimumSize = new Size(960, 640);
 
-            // 图标：优先 exe 旁 app.ico，否则用内嵌鲸鱼图标
+            // 图标：优先 exe 旁 app.ico，否则用黑色鲸鱼图标
             try
             {
                 string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
@@ -350,7 +350,7 @@ namespace DshWebLauncher
         private void BuildStatusStrip()
         {
             StatusStrip strip = new StatusStrip();
-            statusLabel = new ToolStripStatusLabel("正在初始化...");
+            statusLabel = new ToolStripStatusLabel("少女祈祷中...");
             strip.Items.Add(statusLabel);
             Controls.Add(strip);
         }
@@ -370,7 +370,7 @@ namespace DshWebLauncher
             }
 
             // 固定分辨率核心：控件物理尺寸与 RasterizationScale 成对更新，
-            // 使 逻辑视口 = 物理尺寸 / RasterizationScale 恒等于目标分辨率。
+            // 使 逻辑视口 = 物理尺寸 / RasterizationScale 与目标分辨率对等。
             double scale = Math.Min((double)cw / renderSize.Width, (double)ch / renderSize.Height);
             if (scale < 0.05) scale = 0.05;
             if (scale > 4.0) scale = 4.0;
@@ -451,16 +451,16 @@ namespace DshWebLauncher
         private async void OnFormLoad(object sender, EventArgs e)
         {
             toolStrip.BringToFront();
-            statusLabel.Text = "正在检查服务状态...";
+            statusLabel.Text = "少女祈祷中...";
             if (!Program.IsPortOpen())
             {
                 if (string.IsNullOrEmpty(Program.StartScript))
                 {
-                    statusLabel.Text = "服务未运行（未配置 startScript，直接尝试加载页面）";
+                    statusLabel.Text = "少女祈祷中...";
                 }
                 else
                 {
-                    statusLabel.Text = "服务未运行，正在启动...";
+                    statusLabel.Text = "少女祈祷中...";
                 }
                 Program.StartDshIfNeeded();
                 for (int i = 0; i < Program.WaitSeconds; i++)
@@ -468,7 +468,7 @@ namespace DshWebLauncher
                     await Task.Delay(1000);
                     if (Program.IsPortOpen()) break;
                     if (i % 5 == 4)
-                        statusLabel.Text = string.Format("正在等待服务启动 ({0}/{1} 秒)...", i + 1, Program.WaitSeconds);
+                        statusLabel.Text = string.Format("少女祈祷中 ({0}/{1} 秒)...", i + 1, Program.WaitSeconds);
                 }
             }
 
@@ -497,7 +497,7 @@ namespace DshWebLauncher
 
                 webView.NavigationStarting += (s2, e2) =>
                 {
-                    statusLabel.Text = "正在加载 " + e2.Uri + " ...";
+                    statusLabel.Text = "少女祈祷中...";
                 };
                 webView.NavigationCompleted += async (s2, e2) =>
                 {
@@ -505,7 +505,6 @@ namespace DshWebLauncher
                     txtUrl.Text = uri;
                     if (e2.IsSuccess)
                     {
-                        // 读取页面真实视口，用于状态栏展示
                         string js = "window.innerWidth + ' x ' + window.innerHeight + ' @ ' + window.devicePixelRatio";
                         string vp = "";
                         try
@@ -523,7 +522,7 @@ namespace DshWebLauncher
                         statusLabel.Text = "加载失败：" + e2.WebErrorStatus;
                     }
                 };
-                statusLabel.Text = "正在初始化内嵌浏览器...";
+                statusLabel.Text = "少女祈祷中...";
             }
             catch (Exception ex)
             {
