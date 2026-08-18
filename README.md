@@ -39,7 +39,7 @@
 2. 在 exe 同目录创建 `launcher.config.json` 进行配置，见下文（可跳过）
 3. 双击运行。若目标服务未启动且配置了 `startScript`，程序会自动拉起并等待就绪，然后加载页面
 
-> 提示：exe 首次运行时会在同目录生成 `WebView2Loader.dll`（原生组件），属正常行为，请勿删除。
+> 提示：exe 首次运行时会在同目录生成 `WebView2Loader.dll`（原生组件）与json配置文件，属正常行为，请勿删除。
 
 ## 配置
 
