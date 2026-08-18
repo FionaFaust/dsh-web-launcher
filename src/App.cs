@@ -209,12 +209,7 @@ namespace DshWebLauncher
             {
                 if (!string.IsNullOrEmpty(StartScript) && File.Exists(StartScript))
                 {
-                    Process p = new Process();
-                    p.StartInfo.FileName = StartScript;
-                    p.StartInfo.WorkingDirectory = Path.GetDirectoryName(StartScript);
-                    p.StartInfo.UseShellExecute = true;
-                    p.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-                    p.Start();
+                    LaunchHidden(StartScript, "", Path.GetDirectoryName(StartScript));
                     return;
                 }
 
@@ -222,15 +217,24 @@ namespace DshWebLauncher
                 string cli = FindDshCli();
                 if (cli != null)
                 {
-                    Process p = new Process();
-                    p.StartInfo.FileName = cli;
-                    p.StartInfo.Arguments = "web";
-                    p.StartInfo.UseShellExecute = true;
-                    p.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-                    p.Start();
+                    LaunchHidden(cli, "web", null);
                 }
             }
             catch { }
+        }
+
+        // 通过 cmd /c 隐藏启动批处理/命令（UseShellExecute=false 的 CreateProcess 路径，
+        // 在沙箱与常规环境下都更可靠；.cmd/.bat 必须经 cmd.exe 包装）
+        private static void LaunchHidden(string file, string args, string workDir)
+        {
+            Process p = new Process();
+            p.StartInfo.FileName = "cmd.exe";
+            p.StartInfo.Arguments = "/c \"\"" + file + "\"" + (args.Length > 0 ? " " + args : "") + "\"";
+            if (!string.IsNullOrEmpty(workDir)) p.StartInfo.WorkingDirectory = workDir;
+            p.StartInfo.UseShellExecute = false;
+            p.StartInfo.CreateNoWindow = true;
+            p.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+            p.Start();
         }
 
         // 在 PATH 与常见安装位置查找 dsh 命令
