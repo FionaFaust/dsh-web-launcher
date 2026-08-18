@@ -298,11 +298,13 @@ namespace DshWebLauncher
         private Rectangle savedBounds;
         private bool savedToolStripVisible, savedStatusVisible;
         private System.Windows.Forms.Timer hoverTimer;
-        private System.Windows.Forms.Timer slideTimer;   // 工具栏滑动动画
+        private System.Threading.Timer slideTimer;   // 高精度动画定时器（线程池，8ms 触发）
+        private System.Diagnostics.Stopwatch slideClock = System.Diagnostics.Stopwatch.StartNew();
+        private double slideStartY, slideEndY, slideStartMs;   // 动画起止位置与开始时间
         private int toolbarTargetY = int.MinValue;       // 动画目标 Y（0=显示，负值=隐藏）
         private const int HoverZoneHeight = 4;   // 顶部触发区高度（像素）
-        private const int SlideInterval = 16;    // 动画帧间隔 ms（~60fps）
-        private const double SlideEase = 0.22;   // 每帧向目标靠近的比例（ease-out）
+        private const double SlideDurationMs = 260;  // 动画时长 ms（ease-out 全程）
+        private object slideLock = new object(); // 动画状态锁
 
         public BrowserForm()
         {
@@ -349,9 +351,9 @@ namespace DshWebLauncher
             {
                 toolStrip.Dock = DockStyle.None;   // 手动定位以便滑动动画
                 toolStrip.Visible = false;
-                slideTimer = new System.Windows.Forms.Timer();
-                slideTimer.Interval = SlideInterval;
-                slideTimer.Tick += OnSlideTick;
+                timeBeginPeriod(1);                // 提高定时器分辨率到 1ms（动画触发精度）
+                slideTimer = new System.Threading.Timer(OnSlideTick, null,
+                    System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);   // 手动启动
                 hoverTimer = new System.Windows.Forms.Timer();
                 hoverTimer.Interval = 150;
                 hoverTimer.Tick += OnHoverTick;
@@ -425,11 +427,15 @@ namespace DshWebLauncher
         private static extern IntPtr GetForegroundWindow();
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool IsChild(IntPtr hWndParent, IntPtr hWnd);
+        // 提高系统定时器分辨率到 1ms，让 120fps 动画真正生效（默认 ~15.6ms 会被限制到 ~64Hz）
+        [System.Runtime.InteropServices.DllImport("winmm.dll")]
+        private static extern uint timeBeginPeriod(uint uPeriod);
+        [System.Runtime.InteropServices.DllImport("winmm.dll")]
+        private static extern uint timeEndPeriod(uint uPeriod);
 
         // 首次显示后初始化工具栏动画状态（此时工具栏高度已确定）
         private void OnFirstShown(object sender, EventArgs e)
         {
-            if (slideTimer == null) return;
             toolbarTargetY = -toolStrip.Height;      // 初始：完全隐藏在窗口上方
             toolStrip.Location = new Point(0, toolbarTargetY);
             toolStrip.Visible = false;
@@ -438,7 +444,7 @@ namespace DshWebLauncher
         // 轮询鼠标位置：位于窗口顶部触发区或导航条上时滑入，否则滑出
         private void OnHoverTick(object sender, EventArgs e)
         {
-            if (!IsHandleCreated || !Visible || slideTimer == null) return;
+            if (!IsHandleCreated || !Visible || !Program.AutoHideToolbar) return;
             if (toolbarTargetY == int.MinValue) return;   // 尚未初始化
             Point cursor = PointToClient(Cursor.Position);
             bool overToolbar = toolStrip.Bounds.Contains(cursor);
@@ -453,34 +459,54 @@ namespace DshWebLauncher
                     toolStrip.Visible = true;      // 滑入前先可见
                     toolStrip.BringToFront();
                 }
-                slideTimer.Start();
+                StartSlide(target);
             }
         }
 
-        // 滑动动画：每帧按 easing 比例向目标位置靠近
-        private void OnSlideTick(object sender, EventArgs e)
+        // 启动滑动动画：记录起始状态，定时器以 8ms 触发（目标 120fps）
+        private void StartSlide(int targetY)
         {
-            if (slideTimer == null || toolbarTargetY == int.MinValue) return;
-            int cur = toolStrip.Top;
-            int target = toolbarTargetY;
-            int next = cur + (int)((target - cur) * SlideEase);
-            if (Math.Abs(target - next) <= 1) next = target;
-            toolStrip.Location = new Point(0, next);
-            if (next == target)
+            slideStartY = toolStrip.Top;
+            slideEndY = targetY;
+            slideStartMs = slideClock.Elapsed.TotalMilliseconds;
+            slideTimer.Change(0, 8);
+        }
+
+        // 滑动动画：线程池定时器触发，回到 UI 线程按真实时间插值渲染
+        private void OnSlideTick(object state)
+        {
+            try
             {
-                slideTimer.Stop();
-                if (target < 0) toolStrip.Visible = false;   // 完全滑出后隐藏
+                if (IsDisposed || !IsHandleCreated) return;
+                BeginInvoke(new Action(AnimateSlideFrame));
             }
+            catch { }
+        }
+
+        // 按真实时间推进动画帧（ease-out cubic，动画时长恒定，不受触发抖动影响）
+        private void AnimateSlideFrame()
+        {
+            if (IsDisposed) return;
+            double t = (slideClock.Elapsed.TotalMilliseconds - slideStartMs) / SlideDurationMs;
+            if (t >= 1.0)
+            {
+                toolStrip.Location = new Point(0, (int)slideEndY);
+                slideTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+                if (slideEndY < 0) toolStrip.Visible = false;   // 完全滑出后隐藏
+                return;
+            }
+            double ease = 1 - Math.Pow(1 - t, 3);   // ease-out cubic
+            int y = (int)(slideStartY + (slideEndY - slideStartY) * ease);
+            toolStrip.Location = new Point(0, y);
         }
 
         // 窗口尺寸变化时保持工具栏宽度与位置
         private void SyncToolbar()
         {
-            if (toolStrip == null || slideTimer == null) return;
+            if (toolStrip == null) return;
             toolStrip.Width = ClientSize.Width;
             if (toolbarTargetY == int.MinValue) return;
-            if (!slideTimer.Enabled)
-                toolStrip.Location = new Point(0, toolbarTargetY);
+            toolStrip.Location = new Point(0, toolbarTargetY);
         }
 
         // 全屏：记状态→隐藏栏/边框→铺满所在显示器；退出时原样恢复
@@ -497,11 +523,11 @@ namespace DshWebLauncher
                 FormBorderStyle = FormBorderStyle.None;
                 WindowState = FormWindowState.Normal;
                 // 全屏时工具栏滑出隐藏（若动画已初始化）
-                if (slideTimer != null && toolbarTargetY != int.MinValue)
+                if (toolbarTargetY != int.MinValue)
                 {
                     toolbarTargetY = -toolStrip.Height;
                     toolStrip.Visible = false;
-                    if (slideTimer.Enabled) slideTimer.Stop();
+                    slideTimer.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
                     toolStrip.Location = new Point(0, toolbarTargetY);
                 }
                 statusLabel.Owner.Visible = false;
@@ -790,7 +816,8 @@ namespace DshWebLauncher
             }
             catch { }
             if (hoverTimer != null) { hoverTimer.Stop(); hoverTimer.Dispose(); hoverTimer = null; }
-            if (slideTimer != null) { slideTimer.Stop(); slideTimer.Dispose(); slideTimer = null; }
+            if (slideTimer != null) { slideTimer.Dispose(); slideTimer = null; }
+            if (Program.AutoHideToolbar) timeEndPeriod(1);   // 还原定时器分辨率
             try
             {
                 if (initialized) webView.Dispose();
