@@ -36,7 +36,7 @@
 [![GitHub All Releases](https://img.shields.io/github/downloads/FionaFaust/dsh-web-launcher/total?label=总下载量&color=success)](https://github.com/FionaFaust/dsh-web-launcher/releases/latest)
 
 1. 点击上方徽章或 [Releases 页面](https://github.com/FionaFaust/dsh-web-launcher/releases/latest) 下载 `DSHWebLauncher.exe`（单文件，当前最新版 v1.1.2.0）
-2. 在 exe 同目录创建 `launcher.config.json` 进行配置，见下文（可跳过）
+2. ~~在 exe 同目录创建 `launcher.config.json` 进行配置，见下文（可跳过）~~
 3. 双击运行。若目标服务未启动且配置了 `startScript`，程序会自动拉起并等待就绪，然后加载页面
 
 > 提示：exe 首次运行时会在同目录生成 `WebView2Loader.dll`（原生组件）与json配置文件，属正常行为，请勿删除。
