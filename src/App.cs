@@ -298,7 +298,11 @@ namespace DshWebLauncher
         private Rectangle savedBounds;
         private bool savedToolStripVisible, savedStatusVisible;
         private System.Windows.Forms.Timer hoverTimer;
+        private System.Windows.Forms.Timer slideTimer;   // 工具栏滑动动画
+        private int toolbarTargetY = int.MinValue;       // 动画目标 Y（0=显示，负值=隐藏）
         private const int HoverZoneHeight = 4;   // 顶部触发区高度（像素）
+        private const int SlideInterval = 16;    // 动画帧间隔 ms（~60fps）
+        private const double SlideEase = 0.22;   // 每帧向目标靠近的比例（ease-out）
 
         public BrowserForm()
         {
@@ -340,16 +344,21 @@ namespace DshWebLauncher
             BuildWebView();
             BuildStatusStrip();
 
-            // 顶部导航条自动隐藏：常态隐藏，鼠标移到窗口顶部时显示
+            // 顶部导航条自动隐藏：常态隐藏，鼠标移到窗口顶部时平滑滑入，移开时滑出
             if (Program.AutoHideToolbar)
             {
+                toolStrip.Dock = DockStyle.None;   // 手动定位以便滑动动画
                 toolStrip.Visible = false;
+                slideTimer = new System.Windows.Forms.Timer();
+                slideTimer.Interval = SlideInterval;
+                slideTimer.Tick += OnSlideTick;
                 hoverTimer = new System.Windows.Forms.Timer();
                 hoverTimer.Interval = 150;
                 hoverTimer.Tick += OnHoverTick;
                 hoverTimer.Start();
             }
 
+            Shown += OnFirstShown;
             Resize += OnWindowResize;
             Load += OnFormLoad;
             FormClosing += OnFormClosing;
@@ -417,20 +426,61 @@ namespace DshWebLauncher
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool IsChild(IntPtr hWndParent, IntPtr hWnd);
 
-        // 轮询鼠标位置：位于窗口顶部触发区或导航条上时显示导航条，否则隐藏
+        // 首次显示后初始化工具栏动画状态（此时工具栏高度已确定）
+        private void OnFirstShown(object sender, EventArgs e)
+        {
+            if (slideTimer == null) return;
+            toolbarTargetY = -toolStrip.Height;      // 初始：完全隐藏在窗口上方
+            toolStrip.Location = new Point(0, toolbarTargetY);
+            toolStrip.Visible = false;
+        }
+
+        // 轮询鼠标位置：位于窗口顶部触发区或导航条上时滑入，否则滑出
         private void OnHoverTick(object sender, EventArgs e)
         {
-            if (!IsHandleCreated || !Visible || isFullscreen) return;
-            if (hoverTimer == null) return;
+            if (!IsHandleCreated || !Visible || slideTimer == null) return;
+            if (toolbarTargetY == int.MinValue) return;   // 尚未初始化
             Point cursor = PointToClient(Cursor.Position);
             bool overToolbar = toolStrip.Bounds.Contains(cursor);
             bool nearTop = cursor.Y >= 0 && cursor.Y <= HoverZoneHeight;
             bool show = overToolbar || nearTop;
-            if (show != toolStrip.Visible)
+            int target = show ? 0 : -toolStrip.Height;
+            if (target != toolbarTargetY)
             {
-                toolStrip.Visible = show;
-                if (show) toolStrip.BringToFront();
+                toolbarTargetY = target;
+                if (show)
+                {
+                    toolStrip.Visible = true;      // 滑入前先可见
+                    toolStrip.BringToFront();
+                }
+                slideTimer.Start();
             }
+        }
+
+        // 滑动动画：每帧按 easing 比例向目标位置靠近
+        private void OnSlideTick(object sender, EventArgs e)
+        {
+            if (slideTimer == null || toolbarTargetY == int.MinValue) return;
+            int cur = toolStrip.Top;
+            int target = toolbarTargetY;
+            int next = cur + (int)((target - cur) * SlideEase);
+            if (Math.Abs(target - next) <= 1) next = target;
+            toolStrip.Location = new Point(0, next);
+            if (next == target)
+            {
+                slideTimer.Stop();
+                if (target < 0) toolStrip.Visible = false;   // 完全滑出后隐藏
+            }
+        }
+
+        // 窗口尺寸变化时保持工具栏宽度与位置
+        private void SyncToolbar()
+        {
+            if (toolStrip == null || slideTimer == null) return;
+            toolStrip.Width = ClientSize.Width;
+            if (toolbarTargetY == int.MinValue) return;
+            if (!slideTimer.Enabled)
+                toolStrip.Location = new Point(0, toolbarTargetY);
         }
 
         // 全屏：记状态→隐藏栏/边框→铺满所在显示器；退出时原样恢复
@@ -446,7 +496,14 @@ namespace DshWebLauncher
 
                 FormBorderStyle = FormBorderStyle.None;
                 WindowState = FormWindowState.Normal;
-                toolStrip.Visible = false;
+                // 全屏时工具栏滑出隐藏（若动画已初始化）
+                if (slideTimer != null && toolbarTargetY != int.MinValue)
+                {
+                    toolbarTargetY = -toolStrip.Height;
+                    toolStrip.Visible = false;
+                    if (slideTimer.Enabled) slideTimer.Stop();
+                    toolStrip.Location = new Point(0, toolbarTargetY);
+                }
                 statusLabel.Owner.Visible = false;
                 Bounds = Screen.FromHandle(Handle).Bounds;
                 isFullscreen = true;
@@ -456,10 +513,10 @@ namespace DshWebLauncher
             else
             {
                 FormBorderStyle = savedBorder;
-                toolStrip.Visible = savedToolStripVisible;
                 statusLabel.Owner.Visible = savedStatusVisible;
                 Bounds = savedBounds;
                 isFullscreen = false;
+                // 退出全屏后由 hover 轮询按鼠标位置决定工具栏显示
                 UpdateEscHotkey();   // 注销 Esc 热键
                 LayoutWebView();
             }
@@ -612,6 +669,7 @@ namespace DshWebLauncher
         private void OnWindowResize(object sender, EventArgs e)
         {
             LayoutWebView();
+            SyncToolbar();
         }
 
         private void OnResolutionChanged(object sender, EventArgs e)
@@ -732,6 +790,7 @@ namespace DshWebLauncher
             }
             catch { }
             if (hoverTimer != null) { hoverTimer.Stop(); hoverTimer.Dispose(); hoverTimer = null; }
+            if (slideTimer != null) { slideTimer.Stop(); slideTimer.Dispose(); slideTimer = null; }
             try
             {
                 if (initialized) webView.Dispose();
