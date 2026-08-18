@@ -27,6 +27,7 @@ namespace DshWebLauncher
         internal static string StartScript = "";
         internal static int WaitSeconds = 40;
         internal static double WindowScale = 0.72;
+        internal static bool AutoHideToolbar = true;
         internal static Size[] Resolutions = new Size[]
         {
             new Size(3840, 2160),
@@ -34,7 +35,7 @@ namespace DshWebLauncher
         };
 
         // 版本号（界面底部展示）
-        internal const string Version = "Ver1.1.2.0";
+        internal const string Version = "Ver1.1.4.0";
 
         [STAThread]
         private static void Main()
@@ -76,6 +77,7 @@ namespace DshWebLauncher
                 if (dict.TryGetValue("startScript", out v)) StartScript = Convert.ToString(v);
                 if (dict.TryGetValue("waitSeconds", out v)) WaitSeconds = Convert.ToInt32(v);
                 if (dict.TryGetValue("windowScale", out v)) WindowScale = Convert.ToDouble(v);
+                if (dict.TryGetValue("autoHideToolbar", out v)) AutoHideToolbar = Convert.ToBoolean(v);
                 if (dict.TryGetValue("resolutions", out v))
                 {
                     ArrayList arr = v as ArrayList;
@@ -108,6 +110,7 @@ namespace DshWebLauncher
                 sb.AppendLine("  \"startScript\": " + JsonStr(StartScript) + ",");
                 sb.AppendLine("  \"waitSeconds\": " + WaitSeconds + ",");
                 sb.AppendLine("  \"windowScale\": " + WindowScale.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + ",");
+                sb.AppendLine("  \"autoHideToolbar\": " + (AutoHideToolbar ? "true" : "false") + ",");
                 sb.Append("  \"resolutions\": [");
                 for (int i = 0; i < Resolutions.Length; i++)
                 {
@@ -286,6 +289,8 @@ namespace DshWebLauncher
         private FormBorderStyle savedBorder;
         private Rectangle savedBounds;
         private bool savedToolStripVisible, savedStatusVisible;
+        private System.Windows.Forms.Timer hoverTimer;
+        private const int HoverZoneHeight = 4;   // 顶部触发区高度（像素）
 
         public BrowserForm()
         {
@@ -327,6 +332,16 @@ namespace DshWebLauncher
             BuildWebView();
             BuildStatusStrip();
 
+            // 顶部导航条自动隐藏：常态隐藏，鼠标移到窗口顶部时显示
+            if (Program.AutoHideToolbar)
+            {
+                toolStrip.Visible = false;
+                hoverTimer = new System.Windows.Forms.Timer();
+                hoverTimer.Interval = 150;
+                hoverTimer.Tick += OnHoverTick;
+                hoverTimer.Start();
+            }
+
             Resize += OnWindowResize;
             Load += OnFormLoad;
             FormClosing += OnFormClosing;
@@ -334,6 +349,22 @@ namespace DshWebLauncher
             // 用消息过滤器而非 KeyPreview：WebView2 是独立 HWND 宿主，
             // 焦点在网页内时按键消息不经过 WinForms 键盘管道，必须在此层拦截
             Application.AddMessageFilter(this);
+        }
+
+        // 轮询鼠标位置：位于窗口顶部触发区或导航条上时显示导航条，否则隐藏
+        private void OnHoverTick(object sender, EventArgs e)
+        {
+            if (!IsHandleCreated || !Visible || isFullscreen) return;
+            if (hoverTimer == null) return;
+            Point cursor = PointToClient(Cursor.Position);
+            bool overToolbar = toolStrip.Bounds.Contains(cursor);
+            bool nearTop = cursor.Y >= 0 && cursor.Y <= HoverZoneHeight;
+            bool show = overToolbar || nearTop;
+            if (show != toolStrip.Visible)
+            {
+                toolStrip.Visible = show;
+                if (show) toolStrip.BringToFront();
+            }
         }
 
         // IMessageFilter：在消息分发给任何窗口（含 WebView2 子窗口）之前拦截 F11 / Esc
@@ -642,6 +673,7 @@ namespace DshWebLauncher
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
             Application.RemoveMessageFilter(this);
+            if (hoverTimer != null) { hoverTimer.Stop(); hoverTimer.Dispose(); hoverTimer = null; }
             try
             {
                 if (initialized) webView.Dispose();
