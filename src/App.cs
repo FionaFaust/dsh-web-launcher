@@ -198,13 +198,13 @@ namespace DshWebLauncher
             }
         }
 
-        // 服务未运行且配置了 startScript 时，隐藏调用启动脚本
+        // 服务未运行时拉起 DSH：优先用配置的启动脚本；
+        // 未配置脚本时自动发现 dsh CLI（PATH / 常见安装位置）并隐藏启动 dsh web
         internal static void StartDshIfNeeded()
         {
-            if (string.IsNullOrEmpty(StartScript)) return;
             try
             {
-                if (File.Exists(StartScript))
+                if (!string.IsNullOrEmpty(StartScript) && File.Exists(StartScript))
                 {
                     Process p = new Process();
                     p.StartInfo.FileName = StartScript;
@@ -212,9 +212,57 @@ namespace DshWebLauncher
                     p.StartInfo.UseShellExecute = true;
                     p.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
                     p.Start();
+                    return;
+                }
+
+                // 未配置脚本：尝试自动启动 dsh CLI
+                string cli = FindDshCli();
+                if (cli != null)
+                {
+                    Process p = new Process();
+                    p.StartInfo.FileName = cli;
+                    p.StartInfo.Arguments = "web";
+                    p.StartInfo.UseShellExecute = true;
+                    p.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+                    p.Start();
                 }
             }
             catch { }
+        }
+
+        // 在 PATH 与常见安装位置查找 dsh 命令
+        private static string FindDshCli()
+        {
+            try
+            {
+                string pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
+                string[] names = { "dsh.cmd", "dsh.bat", "dsh.exe", "dsh" };
+                foreach (string dirRaw in pathEnv.Split(';'))
+                {
+                    string dir = dirRaw.Trim();
+                    if (dir.Length == 0) continue;
+                    foreach (string n in names)
+                    {
+                        string full = Path.Combine(dir, n);
+                        if (File.Exists(full)) return full;
+                    }
+                }
+                // 常见 npm 全局安装位置
+                string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                string[] candidates = {
+                    Path.Combine(appData, "npm", "dsh.cmd"),
+                    Path.Combine(appData, "npm", "dsh"),
+                    @"C:\Program Files\nodejs\dsh.cmd",
+                    @"C:\Program Files\nodejs\dsh",
+                    @"C:\Program Files\nodejs\dsh.exe"
+                };
+                foreach (string c in candidates)
+                {
+                    if (File.Exists(c)) return c;
+                }
+            }
+            catch { }
+            return null;
         }
     }
 
@@ -518,14 +566,9 @@ namespace DshWebLauncher
             statusLabel.Text = "少女祈祷中...";
             if (!Program.IsPortOpen())
             {
-                if (string.IsNullOrEmpty(Program.StartScript))
-                {
-                    statusLabel.Text = "少女祈祷中...";
-                }
-                else
-                {
-                    statusLabel.Text = "少女祈祷中...";
-                }
+                statusLabel.Text = string.IsNullOrEmpty(Program.StartScript)
+                    ? "服务未运行，尝试自动启动 DSH..."
+                    : "服务未运行，正在调用启动脚本...";
                 Program.StartDshIfNeeded();
                 for (int i = 0; i < Program.WaitSeconds; i++)
                 {
@@ -542,7 +585,7 @@ namespace DshWebLauncher
                 MessageBox.Show(this,
                     "目标服务未在 " + Program.WaitSeconds + " 秒内就绪。\n" +
                     (string.IsNullOrEmpty(Program.StartScript)
-                        ? "请确认目标服务已运行，或检查 launcher.config.json 的 url/port 配置。"
+                        ? "已尝试自动启动 dsh，请确认：\n1. 本机已安装 DeepSeek Harness（dsh 命令可用）\n2. launcher.config.json 的 url/port 配置正确\n\n也可以在该文件中配置 startScript 指定自定义启动脚本。"
                         : "请检查启动脚本：\n" + Program.StartScript),
                     Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
