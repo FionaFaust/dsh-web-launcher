@@ -269,12 +269,16 @@ namespace DshWebLauncher
         }
     }
 
-    internal sealed class BrowserForm : Form, IMessageFilter
+    internal sealed class BrowserForm : Form
     {
-        private const int WM_KEYDOWN = 0x0100;
-        private const int WM_SYSKEYDOWN = 0x0104;
-        private const int VK_F11 = 0x7A;
-        private const int VK_ESCAPE = 0x1B;
+        // 全局热键：F11 全屏 / Esc 退出（解决焦点在 WebView2 内容时按键不经过本进程消息泵的问题）
+        private const int WM_HOTKEY = 0x0312;
+        private const uint MOD_NOREPEAT = 0x4000;
+        private const uint VK_F11 = 0x7A;
+        private const uint VK_ESCAPE = 0x1B;
+        private const int HOTKEY_ID_F11 = 1;
+        private const int HOTKEY_ID_ESC = 2;
+        private bool escHotkeyRegistered = false;
 
         private Microsoft.Web.WebView2.WinForms.WebView2 webView;
         private Panel hostPanel;
@@ -346,10 +350,68 @@ namespace DshWebLauncher
             Load += OnFormLoad;
             FormClosing += OnFormClosing;
 
-            // 用消息过滤器而非 KeyPreview：WebView2 是独立 HWND 宿主，
-            // 焦点在网页内时按键消息不经过 WinForms 键盘管道，必须在此层拦截
-            Application.AddMessageFilter(this);
+            // 全局热键注册需窗口句柄已创建：在 HandleCreated 后注册 F11，
+            // Esc 仅在全屏状态下临时注册（避免干扰页面内的 Esc 输入）
+            HandleCreated += (s2, e2) => RegisterHotKey(Handle, HOTKEY_ID_F11, MOD_NOREPEAT, VK_F11);
         }
+
+        // 处理全局热键消息（WM_HOTKEY）
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_HOTKEY)
+            {
+                int id = m.WParam.ToInt32();
+                // 仅当本窗口（或其子窗口）为前台时才响应，避免抢占其他程序的热键
+                if (IsForegroundApp())
+                {
+                    if (id == HOTKEY_ID_F11)
+                    {
+                        ToggleFullscreen(!isFullscreen);
+                        return;
+                    }
+                    if (id == HOTKEY_ID_ESC && isFullscreen)
+                    {
+                        ToggleFullscreen(false);
+                        return;
+                    }
+                }
+            }
+            base.WndProc(ref m);
+        }
+
+        // 前台窗口是否为本窗体或其子窗口（含 WebView2 渲染窗口）
+        private bool IsForegroundApp()
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return false;
+            if (fg == Handle) return true;
+            return IsChild(Handle, fg);
+        }
+
+        // 全屏时注册 Esc 热键，退出时注销
+        private void UpdateEscHotkey()
+        {
+            try
+            {
+                if (isFullscreen && !escHotkeyRegistered)
+                    escHotkeyRegistered = RegisterHotKey(Handle, HOTKEY_ID_ESC, MOD_NOREPEAT, VK_ESCAPE);
+                else if (!isFullscreen && escHotkeyRegistered)
+                {
+                    UnregisterHotKey(Handle, HOTKEY_ID_ESC);
+                    escHotkeyRegistered = false;
+                }
+            }
+            catch { }
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool IsChild(IntPtr hWndParent, IntPtr hWnd);
 
         // 轮询鼠标位置：位于窗口顶部触发区或导航条上时显示导航条，否则隐藏
         private void OnHoverTick(object sender, EventArgs e)
@@ -365,24 +427,6 @@ namespace DshWebLauncher
                 toolStrip.Visible = show;
                 if (show) toolStrip.BringToFront();
             }
-        }
-
-        // IMessageFilter：在消息分发给任何窗口（含 WebView2 子窗口）之前拦截 F11 / Esc
-        public bool PreFilterMessage(ref Message m)
-        {
-            if (m.Msg != WM_KEYDOWN && m.Msg != WM_SYSKEYDOWN) return false;
-            int key = (int)(long)m.WParam;
-            if (key == VK_F11)
-            {
-                ToggleFullscreen(!isFullscreen);
-                return true;   // 吞掉消息，不传给 WebView2
-            }
-            if (key == VK_ESCAPE && isFullscreen)
-            {
-                ToggleFullscreen(false);
-                return true;
-            }
-            return false;
         }
 
         // 全屏：记状态→隐藏栏/边框→铺满所在显示器；退出时原样恢复
@@ -402,6 +446,7 @@ namespace DshWebLauncher
                 statusLabel.Owner.Visible = false;
                 Bounds = Screen.FromHandle(Handle).Bounds;
                 isFullscreen = true;
+                UpdateEscHotkey();   // 注册 Esc 热键
                 LayoutWebView();
             }
             else
@@ -411,6 +456,7 @@ namespace DshWebLauncher
                 statusLabel.Owner.Visible = savedStatusVisible;
                 Bounds = savedBounds;
                 isFullscreen = false;
+                UpdateEscHotkey();   // 注销 Esc 热键
                 LayoutWebView();
             }
         }
@@ -672,7 +718,15 @@ namespace DshWebLauncher
 
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
-            Application.RemoveMessageFilter(this);
+            try
+            {
+                if (IsHandleCreated)
+                {
+                    UnregisterHotKey(Handle, HOTKEY_ID_F11);
+                    UnregisterHotKey(Handle, HOTKEY_ID_ESC);
+                }
+            }
+            catch { }
             if (hoverTimer != null) { hoverTimer.Stop(); hoverTimer.Dispose(); hoverTimer = null; }
             try
             {
