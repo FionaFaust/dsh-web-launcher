@@ -35,7 +35,7 @@ namespace DshWebLauncher
         };
 
         // 版本号（界面底部展示）
-        internal const string Version = "Ver1.1.4.0";
+        internal const string Version = "Ver1.1.4.5";
 
         [STAThread]
         private static void Main()
