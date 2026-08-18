@@ -36,10 +36,10 @@
 [![GitHub All Releases](https://img.shields.io/github/downloads/FionaFaust/dsh-web-launcher/total?label=总下载量&color=success)](https://github.com/FionaFaust/dsh-web-launcher/releases/latest)
 
 1. 点击上方徽章或 [Releases 页面](https://github.com/FionaFaust/dsh-web-launcher/releases/latest) 下载 `DSHWebLauncher.exe`（单文件，当前最新版 v1.1.2.0）
-2. 在 exe 同目录创建 `launcher.config.json` 进行配置，见下文（可跳过）
+2. ~~在 exe 同目录创建 `launcher.config.json` 进行配置，见下文（可跳过）~~
 3. 双击运行。若目标服务未启动且配置了 `startScript`，程序会自动拉起并等待就绪，然后加载页面
 
-> 提示：exe 首次运行时会在同目录生成 `WebView2Loader.dll`（原生组件），属正常行为，请勿删除。
+> 提示：exe 首次运行时会在同目录生成 `WebView2Loader.dll`（原生组件）与json配置文件，属正常行为，请勿删除。
 
 ## 配置
 
@@ -143,6 +143,7 @@ A：程序首次运行自动释放的原生组件，属于正常行为；删除�
 - Microsoft Edge WebView2 —— 内嵌浏览器内核
 - 鲸鱼图标来自 DeepSeek Harness Web 官方资源
 - **KSR** 特别致谢，为我提供了丰厚的资金支持以维持生活与项目开发，是我的~~金主~~朋友
+- **Titr**和**伞中荥** 特别致谢，为我提供了资金上的支持,以及长久以来的精神鼓励与宝贵建议
 ## 许可证
 
 [BSD 2-Clause License](LICENSE)
