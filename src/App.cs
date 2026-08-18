@@ -33,6 +33,9 @@ namespace DshWebLauncher
             new Size(2560, 1600)
         };
 
+        // 版本号（界面底部展示）
+        internal const string Version = "Ver1.1.2.0";
+
         [STAThread]
         private static void Main()
         {
@@ -55,7 +58,12 @@ namespace DshWebLauncher
             {
                 string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
                 string path = Path.Combine(dir, "launcher.config.json");
-                if (!File.Exists(path)) return;
+                if (!File.Exists(path))
+                {
+                    // 首次运行：生成默认配置文件，方便用户查看与修改
+                    WriteDefaultConfig(path);
+                    return;
+                }
 
                 JavaScriptSerializer ser = new JavaScriptSerializer();
                 Dictionary<string, object> dict = ser.Deserialize<Dictionary<string, object>>(File.ReadAllText(path));
@@ -85,6 +93,51 @@ namespace DshWebLauncher
                 }
             }
             catch { }
+        }
+
+        // 首次运行：在 exe 同目录生成默认配置（与内置默认值一致），用户可自行编辑
+        private static void WriteDefaultConfig(string path)
+        {
+            try
+            {
+                System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                sb.AppendLine("{");
+                sb.AppendLine("  \"title\": " + JsonStr(WindowTitle) + ",");
+                sb.AppendLine("  \"url\": " + JsonStr(HomeUrl) + ",");
+                sb.AppendLine("  \"port\": " + Port + ",");
+                sb.AppendLine("  \"startScript\": " + JsonStr(StartScript) + ",");
+                sb.AppendLine("  \"waitSeconds\": " + WaitSeconds + ",");
+                sb.AppendLine("  \"windowScale\": " + WindowScale.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + ",");
+                sb.Append("  \"resolutions\": [");
+                for (int i = 0; i < Resolutions.Length; i++)
+                {
+                    if (i > 0) sb.Append(", ");
+                    sb.Append("[" + Resolutions[i].Width + ", " + Resolutions[i].Height + "]");
+                }
+                sb.AppendLine("]");
+                sb.AppendLine("}");
+                File.WriteAllText(path, sb.ToString(), new System.Text.UTF8Encoding(false));
+            }
+            catch { }
+        }
+
+        // JSON 字符串转义（引号/反斜杠/控制字符）
+        private static string JsonStr(string s)
+        {
+            if (s == null) return "\"\"";
+            System.Text.StringBuilder sb = new System.Text.StringBuilder("\"");
+            foreach (char c in s)
+            {
+                if (c == '"') sb.Append("\\\"");
+                else if (c == '\\') sb.Append("\\\\");
+                else if (c == '\n') sb.Append("\\n");
+                else if (c == '\r') sb.Append("\\r");
+                else if (c == '\t') sb.Append("\\t");
+                else if (c < 0x20) sb.Append("\\u" + ((int)c).ToString("x4"));
+                else sb.Append(c);
+            }
+            sb.Append("\"");
+            return sb.ToString();
         }
 
         // 从嵌入资源加载 WebView2 托管 DLL
@@ -359,6 +412,10 @@ namespace DshWebLauncher
             StatusStrip strip = new StatusStrip();
             statusLabel = new ToolStripStatusLabel("少女祈祷中...");
             strip.Items.Add(statusLabel);
+            // 界面最下方右侧：出品信息与版本号
+            ToolStripStatusLabel brand = new ToolStripStatusLabel("艾珀莉亚出品 · " + Program.Version);
+            brand.Alignment = ToolStripItemAlignment.Right;
+            strip.Items.Add(brand);
             Controls.Add(strip);
         }
 
