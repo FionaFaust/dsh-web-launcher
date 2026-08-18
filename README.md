@@ -32,7 +32,10 @@
 
 ## 快速开始
 
-1. 下载Release中的`DSHWebLauncher.exe`（单文件）
+[![GitHub Release](https://img.shields.io/github/v/release/FionaFaust/dsh-web-launcher?label=最新版本&color=blue)](https://github.com/FionaFaust/dsh-web-launcher/releases/latest)
+[![GitHub All Releases](https://img.shields.io/github/downloads/FionaFaust/dsh-web-launcher/total?label=总下载量&color=success)](https://github.com/FionaFaust/dsh-web-launcher/releases/latest)
+
+1. 点击上方徽章或 [Releases 页面](https://github.com/FionaFaust/dsh-web-launcher/releases/latest) 下载 `DSHWebLauncher.exe`（单文件）
 2. 在 exe 同目录创建 `launcher.config.json` 进行配置，见下文（可跳过）
 3. 双击运行。若目标服务未启动且配置了 `startScript`，程序会自动拉起并等待就绪，然后加载页面
 
