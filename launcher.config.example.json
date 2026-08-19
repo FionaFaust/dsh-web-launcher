@@ -5,5 +5,10 @@
   "startScript": "",
   "waitSeconds": 40,
   "windowScale": 0.72,
+  "autoHideToolbar": true,
+  "workspaceRoot": "",
+  "autoRestart": true,
+  "maxStartRetries": 3,
+  "enableLog": true,
   "resolutions": [[3840, 2160], [2560, 1600]]
 }

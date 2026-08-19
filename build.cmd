@@ -1,7 +1,7 @@
 @echo off
 setlocal
 rem ============================================================
-rem  DSH Web Launcher - build script
+rem  DSH Web Launcher - build script (ver1.1.5.0)
 rem  Requires: Windows 10/11, .NET Framework 4.8 SDK (csc.exe)
 rem  Output:   dist\DSHWebLauncher.exe  (single-file, self-contained)
 rem ============================================================
@@ -33,7 +33,12 @@ echo [1/2] Compiling...
     /resource:"%ROOT%vendor\Microsoft.Web.WebView2.WinForms.dll",Microsoft.Web.WebView2.WinForms.dll ^
     /resource:"%ROOT%vendor\WebView2Loader.dll",WebView2Loader.dll ^
     /resource:"%ROOT%assets\whale.ico",whale.ico ^
-    "%ROOT%src\App.cs"
+    "%ROOT%src\Program.cs" ^
+    "%ROOT%src\LauncherConfig.cs" ^
+    "%ROOT%src\Log.cs" ^
+    "%ROOT%src\DshLocator.cs" ^
+    "%ROOT%src\ServiceStarter.cs" ^
+    "%ROOT%src\BrowserForm.cs"
 
 if errorlevel 1 (
     echo [ERROR] Compilation failed.
